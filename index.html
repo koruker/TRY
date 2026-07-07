@@ -158,8 +158,12 @@
           <div class="stat"><div class="label">Son Fiyat</div><div class="value" id="statPrice">—</div></div>
           <div class="stat"><div class="label">Günlük Değişim</div><div class="value" id="statChange">—</div></div>
           <div class="stat"><div class="label">SMA20 / SMA50</div><div class="value" id="statSma">—</div></div>
+          <div class="stat"><div class="label">MA Trendi</div><div class="value" id="statMaTrend">—</div></div>
           <div class="stat"><div class="label">RSI(14)</div><div class="value" id="statRsi">—</div></div>
+          <div class="stat"><div class="label">RSI Trendi (5g)</div><div class="value" id="statRsiTrend">—</div></div>
           <div class="stat"><div class="label">MACD Histogram</div><div class="value" id="statMacd">—</div></div>
+          <div class="stat"><div class="label">Bollinger Bandı</div><div class="value" id="statBollinger">—</div></div>
+          <div class="stat"><div class="label">Bant Genişliği</div><div class="value" id="statBandWidth">—</div></div>
           <div class="stat"><div class="label">Hacim Trendi (5g)</div><div class="value" id="statVol">—</div></div>
         </div>
       </div>
@@ -218,7 +222,7 @@ let rsiChartObj = null;
 //    Not: bu secret sayfa kaynağında görünür, gerçek bir yetkilendirme değildir;
 //    sadece rastgele bot isteklerine karşı hafif bir engel. Asıl korunan şey DEEPSEEK_API_KEY,
 //    o hiçbir zaman tarayıcıya gelmiyor, sadece Apps Script sunucusunda kalıyor.
-const APPS_SCRIPT_URL = 'BURAYA_APPS_SCRIPT_WEB_APP_URLINI_YAPISTIR';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyllBE4T-IBP9_AGHBjHuavseBrUOSmqNV6HnajxV043NwlO-3jdj7ZO752Nlqpdv_p/exec';
 const APP_SECRET = 'mesai-esa-deepseek-2026';
 const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
@@ -328,12 +332,27 @@ function macdHist(closes){
   return macdLine.map((v,i)=> v-signal[i]);
 }
 
+function bollinger(closes, period=20, mult=2){
+  const mid = sma(closes, period);
+  const upper = new Array(closes.length).fill(null);
+  const lower = new Array(closes.length).fill(null);
+  for(let i=period-1;i<closes.length;i++){
+    let sumSq = 0;
+    for(let j=i-period+1;j<=i;j++){ sumSq += Math.pow(closes[j]-mid[i], 2); }
+    const std = Math.sqrt(sumSq/period);
+    upper[i] = mid[i] + mult*std;
+    lower[i] = mid[i] - mult*std;
+  }
+  return { mid, upper, lower };
+}
+
 function renderAll(){
   const closes = priceData.map(d=>d.close);
   const labels = priceData.map(d=> d.date.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'}));
   const sma20 = sma(closes,20), sma50 = sma(closes,50);
   const rsiArr = rsi(closes,14);
   const macdArr = macdHist(closes);
+  const bb = bollinger(closes,20,2);
 
   document.getElementById('chartArea').innerHTML = '<canvas id="priceChart" height="130"></canvas>';
   const ctx = document.getElementById('priceChart').getContext('2d');
@@ -343,7 +362,9 @@ function renderAll(){
     data:{ labels, datasets:[
       {label:'Fiyat', data:closes, borderColor:'#E7EAEE', borderWidth:1.5, pointRadius:0, tension:0.15},
       {label:'SMA20', data:sma20, borderColor:'#D4A54A', borderWidth:1.2, pointRadius:0, tension:0.15},
-      {label:'SMA50', data:sma50, borderColor:'#5B7FE0', borderWidth:1.2, pointRadius:0, tension:0.15}
+      {label:'SMA50', data:sma50, borderColor:'#5B7FE0', borderWidth:1.2, pointRadius:0, tension:0.15},
+      {label:'Bollinger Üst', data:bb.upper, borderColor:'rgba(139,147,161,0.55)', borderWidth:1, borderDash:[3,3], pointRadius:0, tension:0.15},
+      {label:'Bollinger Alt', data:bb.lower, borderColor:'rgba(139,147,161,0.55)', borderWidth:1, borderDash:[3,3], pointRadius:0, tension:0.15}
     ]},
     options:{
       responsive:true,
@@ -387,18 +408,60 @@ function renderAll(){
   const prev5 = vols.slice(-10,-5).reduce((a,b)=>a+b,0)/5;
   const volTrendPct = ((last5-prev5)/(prev5||1))*100;
 
+  // MA trendi + kesişim tespiti (son 10 günde sma20/sma50 farkının işareti değişti mi)
+  let maTrendLabel = lastSma20 >= lastSma50 ? 'Yükseliş' : 'Düşüş';
+  const diffNow = lastSma20 - lastSma50;
+  for(let k=Math.max(1,sma20.length-10); k<sma20.length; k++){
+    if(sma20[k-1]!=null && sma50[k-1]!=null){
+      const diffPrev = sma20[k-1]-sma50[k-1];
+      if(diffPrev<0 && diffNow>0) maTrendLabel = 'Altın Kesişim';
+      if(diffPrev>0 && diffNow<0) maTrendLabel = 'Ölüm Kesişimi';
+    }
+  }
+
+  // RSI trendi: son değeri 5 gün önceki değerle kıyasla
+  const rsi5Ago = rsiArr[rsiArr.length-6];
+  let rsiTrendLabel = 'Yatay';
+  if(rsi5Ago!=null){
+    const rsiDiff = lastRsi - rsi5Ago;
+    if(rsiDiff > 3) rsiTrendLabel = 'Yükseliyor';
+    else if(rsiDiff < -3) rsiTrendLabel = 'Düşüyor';
+  }
+  const rsiSon10Gun = rsiArr.slice(-10).filter(v=>v!=null).map(v=>Number(v.toFixed(1)));
+
+  // Bollinger konumu ve bant genişliği
+  const lastUpper = bb.upper[bb.upper.length-1];
+  const lastLower = bb.lower[bb.lower.length-1];
+  const lastMid = bb.mid[bb.mid.length-1];
+  let bbPosition = 'Orta Bant';
+  if(lastClose >= lastUpper) bbPosition = 'Üst Bandın Üzerinde';
+  else if(lastClose <= lastLower) bbPosition = 'Alt Bandın Altında';
+  else if(lastClose > lastMid) bbPosition = 'Üst Banda Yakın';
+  else bbPosition = 'Alt Banda Yakın';
+  const bandWidthPct = ((lastUpper-lastLower)/lastMid)*100;
+
   document.getElementById('statsPanel').style.display = 'block';
   document.getElementById('statPrice').textContent = lastClose.toFixed(2)+' ₺';
   const chEl = document.getElementById('statChange');
   chEl.textContent = (changePct>=0?'+':'')+changePct.toFixed(2)+'%';
   chEl.className = 'value ' + (changePct>=0?'up':'down');
   document.getElementById('statSma').textContent = lastSma20.toFixed(2)+' / '+lastSma50.toFixed(2);
+  const maTrendEl = document.getElementById('statMaTrend');
+  maTrendEl.textContent = maTrendLabel;
+  maTrendEl.className = 'value ' + (maTrendLabel==='Yükseliş'||maTrendLabel==='Altın Kesişim' ? 'up' : maTrendLabel==='Düşüş'||maTrendLabel==='Ölüm Kesişimi' ? 'down' : '');
   const rsiEl = document.getElementById('statRsi');
   rsiEl.textContent = lastRsi.toFixed(1) + (lastRsi>70?' (Aşırı Alım)':lastRsi<30?' (Aşırı Satım)':'');
   rsiEl.className = 'value ' + (lastRsi>70?'down':lastRsi<30?'up':'');
+  const rsiTrendEl = document.getElementById('statRsiTrend');
+  rsiTrendEl.textContent = rsiTrendLabel;
+  rsiTrendEl.className = 'value ' + (rsiTrendLabel==='Yükseliyor'?'up':rsiTrendLabel==='Düşüyor'?'down':'');
   const macdEl = document.getElementById('statMacd');
   macdEl.textContent = lastMacd.toFixed(3);
   macdEl.className = 'value ' + (lastMacd>=0?'up':'down');
+  const bbEl = document.getElementById('statBollinger');
+  bbEl.textContent = bbPosition;
+  bbEl.className = 'value ' + (bbPosition==='Üst Bandın Üzerinde'?'down':bbPosition==='Alt Bandın Altında'?'up':'');
+  document.getElementById('statBandWidth').textContent = bandWidthPct.toFixed(1)+'%';
   const volEl = document.getElementById('statVol');
   volEl.textContent = (volTrendPct>=0?'+':'')+volTrendPct.toFixed(1)+'%';
   volEl.className = 'value ' + (volTrendPct>=0?'up':'down');
@@ -409,8 +472,18 @@ function renderAll(){
     gunlukDegisimYuzde: Number(changePct.toFixed(2)),
     sma20: Number(lastSma20.toFixed(2)),
     sma50: Number(lastSma50.toFixed(2)),
+    maTrendi: maTrendLabel,
     rsi14: Number(lastRsi.toFixed(1)),
+    rsi14Trendi: rsiTrendLabel,
+    rsi14Son10Gun: rsiSon10Gun,
     macdHistogram: Number(lastMacd.toFixed(3)),
+    bollinger: {
+      ustBant: Number(lastUpper.toFixed(2)),
+      ortaBant: Number(lastMid.toFixed(2)),
+      altBant: Number(lastLower.toFixed(2)),
+      fiyatKonumu: bbPosition,
+      bantGenisligiYuzde: Number(bandWidthPct.toFixed(1))
+    },
     hacimTrendYuzde: Number(volTrendPct.toFixed(1)),
     ornekVeriMi: isSample
   };
@@ -461,7 +534,13 @@ async function runAI(){
         ]
       })
     });
-    const data = await res.json();
+    const rawText = await res.text();
+    let data;
+    try{
+      data = JSON.parse(rawText);
+    }catch(parseErr){
+      throw new Error('Sunucudan JSON gelmedi (HTTP '+res.status+'). Gelen içerik: ' + rawText.slice(0,200));
+    }
     if(data.error) throw new Error(data.error);
     const raw = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
     if(!raw) throw new Error('Yanıt alınamadı');
