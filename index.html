@@ -439,7 +439,7 @@ async function runAI(){
 
   const payload = { teknik: window._teknikOzet, temel };
 
-  if(APPS_SCRIPT_URL.indexOf('BURAYA_') === 0){
+  if(APPS_SCRIPT_URL.indexOf('https://script.google.com/macros/s/AKfycbyllBE4T-IBP9_AGHBjHuavseBrUOSmqNV6HnajxV043NwlO-3jdj7ZO752Nlqpdv_p/exec') === 0){
     document.getElementById('signalResult').innerHTML = '<div class="conf" style="color:var(--down)">Apps Script Web App URL\'si tanımlanmamış (koddaki APPS_SCRIPT_URL).</div>';
     aiBtn.disabled = false;
     aiBtn.textContent = 'AI Yorumu Üret';
