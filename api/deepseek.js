@@ -1,89 +1,47 @@
 // api/deepseek.js
-//
-// Bu dosya GitHub reponda /api/deepseek.js yolunda durmalı.
-// Vercel, /api klasöründeki her dosyayı otomatik olarak bir sunucu fonksiyonuna çevirir.
-// Yani bu dosya, hisse-sinyal-terminali.html'in çağıracağı adres olacak:
-//   https://<proje-adin>.vercel.app/api/deepseek
-//
-// DEEPSEEK_API_KEY ve APP_SECRET buraya YAZILMAZ — Vercel Dashboard'daki
-// "Environment Variables" ekranından eklenir, kod hiçbir zaman anahtarı görmez
-// (process.env üzerinden okunur).
+// Vercel Fonksiyonu — Web Standard "fetch" imzası kullanır (güncel Vercel varsayılanı).
+// DEEPSEEK_API_KEY ve APP_SECRET, Vercel Dashboard > Settings > Environment Variables'tan gelir.
 
-export default async function handler(req, res) {
-  // CORS ayarları: GitHub Pages (github.io) farklı bir alan adı olduğu için gerekli
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type'
+};
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Sadece POST isteği kabul edilir' });
-  }
-
-  const { secret, model, messages } = req.body || {};
-
-  if (secret !== process.env.APP_SECRET) {
-    return res.status(401).json({ error: 'Yetkisiz istek' });
-  }
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Geçersiz istek: messages eksik' });
-  }
-
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Sunucuda DEEPSEEK_API_KEY tanımlı değil (Vercel Environment Variables kontrol et)' });
-  }
-
-  try {
-    const upstream = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: model || 'deepseek-v4-flash',
-        messages,
-        temperature: 0.3
-      })
-    });
-
-    const data = await upstream.json();
-    if (!upstream.ok) {
-      return res.status(upstream.status).json({ error: 'DeepSeek hata döndürdü: ' + JSON.stringify(data) });
-    }
-    return res.status(200).json(data);
-
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
+function jsonResponse(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+  });
 }
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+export default async function handler(request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: CORS_HEADERS });
   }
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Sadece POST isteği kabul edilir' });
+  if (request.method !== 'POST') {
+    return jsonResponse({ error: 'Sadece POST isteği kabul edilir' }, 405);
   }
 
-  const { secret, model, messages } = req.body || {};
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: 'Geçersiz istek gövdesi (JSON değil)' }, 400);
+  }
+
+  const { secret, model, messages } = body || {};
 
   if (secret !== process.env.APP_SECRET) {
-    return res.status(401).json({ error: 'Yetkisiz istek' });
+    return jsonResponse({ error: 'Yetkisiz istek' }, 401);
   }
   if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Geçersiz istek: messages eksik' });
+    return jsonResponse({ error: 'Geçersiz istek: messages eksik' }, 400);
   }
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Sunucuda DEEPSEEK_API_KEY tanımlı değil (Vercel Environment Variables kontrol et)' });
+    return jsonResponse({ error: 'Sunucuda DEEPSEEK_API_KEY tanımlı değil (Vercel Environment Variables kontrol et)' }, 500);
   }
 
   try {
@@ -102,11 +60,11 @@ export default async function handler(req, res) {
 
     const data = await upstream.json();
     if (!upstream.ok) {
-      return res.status(upstream.status).json({ error: 'DeepSeek hata döndürdü: ' + JSON.stringify(data) });
+      return jsonResponse({ error: 'DeepSeek hata döndürdü: ' + JSON.stringify(data) }, upstream.status);
     }
-    return res.status(200).json(data);
+    return jsonResponse(data, 200);
 
   } catch (err) {
-    return res.status(500).json({ error: String(err) });
+    return jsonResponse({ error: String(err) }, 500);
   }
 }
