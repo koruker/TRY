@@ -216,14 +216,19 @@ let isSample = false;
 let priceChart = null;
 let rsiChartObj = null;
 
-// --- DeepSeek / Apps Script Proxy Ayarları ---
-// 1) Google Apps Script projeni deploy ettikten sonra Web App URL'sini APPS_SCRIPT_URL'ye yapıştır.
-// 2) APP_SECRET değerini Code.gs'teki DOGRULAMA_ANAHTARI ile birebir aynı yap.
-//    Not: bu secret sayfa kaynağında görünür, gerçek bir yetkilendirme değildir;
+// --- DeepSeek / Vercel Proxy Ayarları ---
+// 1) api/deepseek.js dosyasını GitHub reponun köküne (aynı repo, /api klasörü) ekle.
+// 2) Vercel'de bu repoyu import et, deploy et.
+// 3) Vercel Dashboard > Project > Settings > Environment Variables'a ekle:
+//      DEEPSEEK_API_KEY = <DeepSeek'ten aldığın gerçek anahtar>
+//      APP_SECRET       = aşağıdaki APP_SECRET ile birebir aynı değer
+// 4) Deploy sonrası adresin şu formatta olur: https://<proje-adin>.vercel.app/api/deepseek
+//    Onu PROXY_URL'ye yapıştır.
+//    Not: APP_SECRET sayfa kaynağında görünür, gerçek bir yetkilendirme değildir;
 //    sadece rastgele bot isteklerine karşı hafif bir engel. Asıl korunan şey DEEPSEEK_API_KEY,
-//    o hiçbir zaman tarayıcıya gelmiyor, sadece Apps Script sunucusunda kalıyor.
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyllBE4T-IBP9_AGHBjHuavseBrUOSmqNV6HnajxV043NwlO-3jdj7ZO752Nlqpdv_p/exec';
-const APP_SECRET = 'mesai-esa-deepseek-2026';
+//    o hiçbir zaman tarayıcıya gelmiyor, sadece Vercel sunucusunda kalıyor.
+const PROXY_URL = 'https://try-git-main-koruker.vercel.app/';
+const APP_SECRET = 'TRY-deepseek-2026';
 const DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
 const tickerInput = document.getElementById('tickerInput');
@@ -512,8 +517,8 @@ async function runAI(){
 
   const payload = { teknik: window._teknikOzet, temel };
 
-  if(APPS_SCRIPT_URL.indexOf('https://script.google.com/macros/library/d/1ORYrhbaR-YwM-Hw3Rws-kaPQfSpxwl21ADE09QEfD7yMJF2BaI_mj32w/2') === 0){
-    document.getElementById('signalResult').innerHTML = '<div class="conf" style="color:var(--down)">Apps Script Web App URL\'si tanımlanmamış (koddaki APPS_SCRIPT_URL).</div>';
+  if(PROXY_URL.indexOf('BURAYA_') === 0){
+    document.getElementById('signalResult').innerHTML = '<div class="conf" style="color:var(--down)">Vercel proxy URL\'si tanımlanmamış (koddaki PROXY_URL).</div>';
     aiBtn.disabled = false;
     aiBtn.textContent = 'AI Yorumu Üret';
     return;
@@ -522,9 +527,9 @@ async function runAI(){
   const systemPrompt = 'Sen bir hisse senedi analiz asistanısın. Sadece verilen sayısal verilere dayanarak yorum yap, veri dışı varsayım veya kesin/garanti ifade kullanma. SADECE geçerli JSON döndür, başka hiçbir açıklama, önsöz veya markdown kod bloğu ekleme. Şema: {"signal":"AL"|"SAT"|"TUT","confidence":"düşük"|"orta"|"yüksek","summary":"2-3 cümlelik Türkçe yorum","risks":"1-2 cümlelik kısa risk notu"}';
 
   try{
-    const res = await fetch(APPS_SCRIPT_URL, {
+    const res = await fetch(PROXY_URL, {
       method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'}, // Apps Script'te CORS preflight'ı önlemek için text/plain kullanılır
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         secret: APP_SECRET,
         model: DEEPSEEK_MODEL,
