@@ -1,77 +1,581 @@
-// api/deepseek.js
-// Vercel Node.js Fonksiyonu — resmi "fetch" Web Standard export imzası.
-// Artık DeepSeek'i doğrudan değil, OpenRouter üzerinden çağırıyor (ücretsiz model kullanmak için).
-// OPENROUTER_API_KEY ve APP_SECRET, Vercel Dashboard > Settings > Environment Variables'tan gelir.
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hisse Sinyal Terminali</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0B0E11;
+    --panel:#12161C;
+    --panel-2:#171C24;
+    --border:#232A35;
+    --text:#E7EAEE;
+    --text-dim:#8B93A1;
+    --accent:#D4A54A;
+    --up:#2FB77D;
+    --down:#E0525C;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:24px;
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;
+    margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border);
+  }
+  .title{display:flex;flex-direction:column;gap:2px;}
+  .title h1{
+    font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;margin:0;
+    letter-spacing:-0.01em;
+  }
+  .title .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);
+    letter-spacing:0.12em;text-transform:uppercase;
+  }
+  .ticker-form{display:flex;gap:8px;align-items:center;}
+  .ticker-form input{
+    background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:0.05em;
+    padding:10px 12px;border-radius:6px;width:140px;text-transform:uppercase;
+  }
+  .ticker-form input:focus{outline:none;border-color:var(--accent);}
+  button{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13px;
+    border:none;border-radius:6px;padding:10px 16px;cursor:pointer;
+    transition:opacity .15s ease;
+  }
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button:hover:not(:disabled){opacity:.85;}
+  .btn-primary{background:var(--accent);color:#1a1204;}
+  .btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
+  .sample-badge{
+    display:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;
+    background:rgba(212,165,74,0.12);color:var(--accent);border:1px solid rgba(212,165,74,0.35);
+    padding:4px 8px;border-radius:4px;text-transform:uppercase;
+  }
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:10px;
+    padding:18px;margin-bottom:16px;
+  }
+  .panel h2{
+    font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;
+    margin:0 0 14px 0;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;
+  }
+  .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+  .stat{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+  .stat .label{font-size:11px;color:var(--text-dim);margin-bottom:4px;}
+  .stat .value{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;}
+  .up{color:var(--up);}
+  .down{color:var(--down);}
+  .neutral{color:var(--accent);}
+  canvas{max-width:100%;}
+  .empty{
+    color:var(--text-dim);font-size:13px;text-align:center;padding:40px 12px;
+    border:1px dashed var(--border);border-radius:8px;
+  }
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;}
+  .field input,.field select{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    font-family:'IBM Plex Mono',monospace;font-size:13px;padding:8px 10px;border-radius:6px;
+  }
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent);}
+  .fund-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
+  .gauge{position:relative;width:200px;height:100px;overflow:hidden;margin:6px auto 2px;}
+  .gauge-arc{
+    position:absolute;top:0;left:0;width:200px;height:200px;border-radius:50%;
+    background:conic-gradient(from 180deg, var(--down) 0deg 60deg, var(--accent) 60deg 120deg, var(--up) 120deg 180deg, transparent 180deg 360deg);
+  }
+  .gauge-mask{position:absolute;top:14px;left:14px;width:172px;height:172px;border-radius:50%;background:var(--panel);}
+  .gauge-needle{
+    position:absolute;left:50%;bottom:0;width:2px;height:82px;background:var(--text);
+    transform-origin:bottom center;transform:translateX(-50%) rotate(0deg);
+    transition:transform .7s cubic-bezier(.34,1.56,.64,1);
+  }
+  .gauge-pivot{
+    position:absolute;left:50%;bottom:-6px;width:12px;height:12px;background:var(--text);
+    border-radius:50%;transform:translateX(-50%);
+  }
+  .gauge-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);
+    font-family:'IBM Plex Mono',monospace;letter-spacing:.06em;padding:0 6px;}
+  .signal-result{text-align:center;margin-top:10px;}
+  .signal-result .sig{
+    font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:.02em;
+  }
+  .signal-result .conf{font-size:11px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:.08em;}
+  .summary-box{margin-top:14px;font-size:13px;line-height:1.55;color:var(--text);}
+  .summary-box .risks{margin-top:10px;color:var(--text-dim);font-size:12px;padding-top:10px;border-top:1px solid var(--border);}
+  .disclaimer{
+    font-size:11px;color:var(--text-dim);line-height:1.5;margin-top:18px;padding-top:14px;
+    border-top:1px solid var(--border);
+  }
+  .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:var(--accent);
+    border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">
+      <span class="eyebrow">BIST · Teknik + Yapay Zeka</span>
+      <h1>Hisse Sinyal Terminali</h1>
+    </div>
+    <div class="ticker-form">
+      <span class="sample-badge" id="sampleBadge">Örnek Veri</span>
+      <input type="text" id="tickerInput" placeholder="THYAO" value="THYAO" maxlength="10">
+      <button class="btn-primary" id="fetchBtn">Getir</button>
+    </div>
+  </header>
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
-};
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Fiyat Grafiği</h2>
+        <div id="chartArea">
+          <div class="empty">Bir BIST sembolü girip "Getir" butonuna bas.</div>
+        </div>
+      </div>
+      <div class="panel" id="rsiPanel" style="display:none;">
+        <h2>RSI (14)</h2>
+        <canvas id="rsiChart" height="90"></canvas>
+      </div>
+      <div class="panel" id="statsPanel" style="display:none;">
+        <h2>Teknik Özet</h2>
+        <div class="stat-row">
+          <div class="stat"><div class="label">Son Fiyat</div><div class="value" id="statPrice">—</div></div>
+          <div class="stat"><div class="label">Günlük Değişim</div><div class="value" id="statChange">—</div></div>
+          <div class="stat"><div class="label">SMA20 / SMA50</div><div class="value" id="statSma">—</div></div>
+          <div class="stat"><div class="label">MA Trendi</div><div class="value" id="statMaTrend">—</div></div>
+          <div class="stat"><div class="label">RSI(14)</div><div class="value" id="statRsi">—</div></div>
+          <div class="stat"><div class="label">RSI Trendi (5g)</div><div class="value" id="statRsiTrend">—</div></div>
+          <div class="stat"><div class="label">MACD Histogram</div><div class="value" id="statMacd">—</div></div>
+          <div class="stat"><div class="label">Bollinger Bandı</div><div class="value" id="statBollinger">—</div></div>
+          <div class="stat"><div class="label">Bant Genişliği</div><div class="value" id="statBandWidth">—</div></div>
+          <div class="stat"><div class="label">Hacim Trendi (5g)</div><div class="value" id="statVol">—</div></div>
+        </div>
+      </div>
+    </div>
 
-function jsonResponse(obj, status) {
-  return new Response(JSON.stringify(obj), {
-    status: status || 200,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-  });
+    <div>
+      <div class="panel">
+        <h2>Şirket Verileri (Temel Analiz)</h2>
+        <div class="fund-grid">
+          <div class="field"><label>F/K</label><input type="number" step="0.1" id="fFK" placeholder="örn. 8.5"></div>
+          <div class="field"><label>PD/DD</label><input type="number" step="0.1" id="fPDDD" placeholder="örn. 1.4"></div>
+          <div class="field"><label>ROE (%)</label><input type="number" step="0.1" id="fROE" placeholder="örn. 22"></div>
+          <div class="field"><label>Net Borç/Özkaynak</label><input type="number" step="0.1" id="fBO" placeholder="örn. 0.6"></div>
+          <div class="field"><label>Net Kâr Marjı Trendi</label>
+            <select id="fMarjTrend">
+              <option value="artıyor">Artıyor</option>
+              <option value="sabit">Sabit</option>
+              <option value="azalıyor">Azalıyor</option>
+            </select>
+          </div>
+          <div class="field"><label>Temettü Verimi (%)</label><input type="number" step="0.1" id="fTemettu" placeholder="örn. 3.2"></div>
+        </div>
+        <button class="btn-primary" id="aiBtn" style="width:100%;margin-top:4px;" disabled>AI Yorumu Üret</button>
+      </div>
+
+      <div class="panel">
+        <h2>Sinyal</h2>
+        <div class="gauge">
+          <div class="gauge-arc"></div>
+          <div class="gauge-mask"></div>
+          <div class="gauge-needle" id="needle"></div>
+          <div class="gauge-pivot"></div>
+        </div>
+        <div class="gauge-labels"><span>SAT</span><span>TUT</span><span>AL</span></div>
+        <div class="signal-result" id="signalResult">
+          <div class="conf">Analiz bekleniyor</div>
+        </div>
+        <div class="summary-box" id="summaryBox"></div>
+        <div class="disclaimer">
+          Bu araç yatırım tavsiyesi değildir. Sinyaller, geçmiş fiyat verisi ve girilen finansal oranlara dayalı otomatik bir yorumdur; yatırım kararlarını kendi araştırmanla ve/veya bir uzmana danışarak vermelisin.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let priceData = null;
+let isSample = false;
+let priceChart = null;
+let rsiChartObj = null;
+
+// --- OpenRouter / Vercel Proxy Ayarları ---
+// 1) api/deepseek.js dosyasını GitHub reponun köküne (/api klasörü) ekle/güncelle.
+// 2) Vercel'de bu repoyu import et, deploy et.
+// 3) Vercel Dashboard > Project > Settings > Environment Variables'a ekle:
+//      OPENROUTER_API_KEY = <openrouter.ai'den aldığın gerçek anahtar>
+//      APP_SECRET          = aşağıdaki APP_SECRET ile birebir aynı değer
+// 4) Deploy sonrası adresin şu formatta olur: https://<proje-adin>.vercel.app/api/deepseek
+//    Onu PROXY_URL'ye yapıştır.
+//    Not: APP_SECRET sayfa kaynağında görünür, gerçek bir yetkilendirme değildir;
+//    sadece rastgele bot isteklerine karşı hafif bir engel. Asıl korunan şey OPENROUTER_API_KEY,
+//    o hiçbir zaman tarayıcıya gelmiyor, sadece Vercel sunucusunda kalıyor.
+//    ÖNEMLİ: AI_MODEL değerini kullanmadan önce openrouter.ai/models sayfasında
+//    "Price: Free" filtresiyle kontrol et — ücretsiz model listesi sık değişiyor.
+const PROXY_URL = 'https://try-koruker.vercel.app/api/deepseek';
+const PRICE_PROXY_URL = 'https://try-koruker.vercel.app/api/price';
+const APP_SECRET = 'TRY-deepseek-2026';
+const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
+
+const tickerInput = document.getElementById('tickerInput');
+const fetchBtn = document.getElementById('fetchBtn');
+const aiBtn = document.getElementById('aiBtn');
+const sampleBadge = document.getElementById('sampleBadge');
+
+fetchBtn.addEventListener('click', loadTicker);
+tickerInput.addEventListener('keydown', e => { if(e.key==='Enter') loadTicker(); });
+aiBtn.addEventListener('click', runAI);
+
+async function loadTicker(){
+  const raw = tickerInput.value.trim().toUpperCase();
+  if(!raw) return;
+  fetchBtn.disabled = true;
+  fetchBtn.innerHTML = '<span class="spin"></span>Getiriliyor';
+  document.getElementById('chartArea').innerHTML = '<div class="empty">Veri çekiliyor…</div>';
+
+  const symbol = raw.endsWith('.IS') ? raw : raw + '.IS';
+  try{
+    const res = await fetch(`${PRICE_PROXY_URL}?symbol=${encodeURIComponent(symbol)}`);
+    if(!res.ok) throw new Error('İstek başarısız');
+    const json = await res.json();
+    const r = json.chart.result[0];
+    const closes = r.indicators.quote[0].close;
+    const volumes = r.indicators.quote[0].volume;
+    const dates = r.timestamp.map(t => new Date(t*1000));
+    const clean = [];
+    for(let i=0;i<closes.length;i++){
+      if(closes[i]!=null) clean.push({date:dates[i], close:closes[i], volume:volumes[i]||0});
+    }
+    if(clean.length < 30) throw new Error('Yetersiz veri');
+    priceData = clean;
+    isSample = false;
+  }catch(err){
+    priceData = generateSampleData();
+    isSample = true;
+  }
+
+  sampleBadge.style.display = isSample ? 'inline-block' : 'none';
+  fetchBtn.disabled = false;
+  fetchBtn.textContent = 'Getir';
+  renderAll();
+  aiBtn.disabled = false;
 }
 
-export default {
-  async fetch(request) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 200, headers: CORS_HEADERS });
-    }
-    if (request.method !== 'POST') {
-      return jsonResponse({ error: 'Sadece POST isteği kabul edilir' }, 405);
-    }
+function generateSampleData(){
+  const data = [];
+  let price = 60 + Math.random()*40;
+  const start = new Date();
+  start.setDate(start.getDate() - 130);
+  for(let i=0;i<130;i++){
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    if(d.getDay()===0 || d.getDay()===6) continue;
+    const ret = (Math.random()-0.48) * 0.025;
+    price = Math.max(1, price * (1+ret));
+    data.push({date:d, close: Number(price.toFixed(2)), volume: Math.round(1000000 + Math.random()*4000000)});
+  }
+  return data;
+}
 
-    let body;
-    try {
-      body = await request.json();
-    } catch (e) {
-      return jsonResponse({ error: 'Geçersiz istek gövdesi (JSON değil)' }, 400);
-    }
+function sma(arr, period){
+  const out = new Array(arr.length).fill(null);
+  for(let i=period-1;i<arr.length;i++){
+    let sum=0; for(let j=i-period+1;j<=i;j++) sum+=arr[j];
+    out[i] = sum/period;
+  }
+  return out;
+}
 
-    const secret = body && body.secret;
-    const model = body && body.model;
-    const messages = body && body.messages;
+function ema(arr, period){
+  const out = new Array(arr.length).fill(null);
+  const k = 2/(period+1);
+  let prev = arr[0];
+  out[0] = prev;
+  for(let i=1;i<arr.length;i++){
+    prev = arr[i]*k + prev*(1-k);
+    out[i] = prev;
+  }
+  return out;
+}
 
-    if (secret !== process.env.APP_SECRET) {
-      return jsonResponse({ error: 'Yetkisiz istek' }, 401);
-    }
-    if (!messages || !Array.isArray(messages)) {
-      return jsonResponse({ error: 'Geçersiz istek: messages eksik' }, 400);
-    }
+function rsi(closes, period=14){
+  const out = new Array(closes.length).fill(null);
+  let gains=0, losses=0;
+  for(let i=1;i<=period;i++){
+    const diff = closes[i]-closes[i-1];
+    if(diff>=0) gains+=diff; else losses-=diff;
+  }
+  let avgGain = gains/period, avgLoss = losses/period;
+  out[period] = 100 - (100/(1+(avgGain/(avgLoss||1e-9))));
+  for(let i=period+1;i<closes.length;i++){
+    const diff = closes[i]-closes[i-1];
+    const gain = diff>0?diff:0, loss = diff<0?-diff:0;
+    avgGain = (avgGain*(period-1)+gain)/period;
+    avgLoss = (avgLoss*(period-1)+loss)/period;
+    out[i] = 100 - (100/(1+(avgGain/(avgLoss||1e-9))));
+  }
+  return out;
+}
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      return jsonResponse({ error: 'Sunucuda OPENROUTER_API_KEY tanımlı değil' }, 500);
-    }
+function macdHist(closes){
+  const ema12 = ema(closes,12), ema26 = ema(closes,26);
+  const macdLine = closes.map((_,i)=> ema12[i]-ema26[i]);
+  const signal = ema(macdLine,9);
+  return macdLine.map((v,i)=> v-signal[i]);
+}
 
-    try {
-      const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey,
-          'HTTP-Referer': 'https://koruker.github.io',
-          'X-Title': 'Hisse Sinyal Terminali'
-        },
-        body: JSON.stringify({
-          model: model || 'meta-llama/llama-4-maverick:free',
-          messages: messages,
-          temperature: 0.3
-        })
-      });
+function bollinger(closes, period=20, mult=2){
+  const mid = sma(closes, period);
+  const upper = new Array(closes.length).fill(null);
+  const lower = new Array(closes.length).fill(null);
+  for(let i=period-1;i<closes.length;i++){
+    let sumSq = 0;
+    for(let j=i-period+1;j<=i;j++){ sumSq += Math.pow(closes[j]-mid[i], 2); }
+    const std = Math.sqrt(sumSq/period);
+    upper[i] = mid[i] + mult*std;
+    lower[i] = mid[i] - mult*std;
+  }
+  return { mid, upper, lower };
+}
 
-      const data = await upstream.json();
-      if (!upstream.ok) {
-        return jsonResponse({ error: 'OpenRouter hata döndürdü: ' + JSON.stringify(data) }, upstream.status);
+function renderAll(){
+  const closes = priceData.map(d=>d.close);
+  const labels = priceData.map(d=> d.date.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'}));
+  const sma20 = sma(closes,20), sma50 = sma(closes,50);
+  const rsiArr = rsi(closes,14);
+  const macdArr = macdHist(closes);
+  const bb = bollinger(closes,20,2);
+
+  document.getElementById('chartArea').innerHTML = '<canvas id="priceChart" height="130"></canvas>';
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  if(priceChart) priceChart.destroy();
+  priceChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Fiyat', data:closes, borderColor:'#E7EAEE', borderWidth:1.5, pointRadius:0, tension:0.15},
+      {label:'SMA20', data:sma20, borderColor:'#D4A54A', borderWidth:1.2, pointRadius:0, tension:0.15},
+      {label:'SMA50', data:sma50, borderColor:'#5B7FE0', borderWidth:1.2, pointRadius:0, tension:0.15},
+      {label:'Bollinger Üst', data:bb.upper, borderColor:'rgba(139,147,161,0.55)', borderWidth:1, borderDash:[3,3], pointRadius:0, tension:0.15},
+      {label:'Bollinger Alt', data:bb.lower, borderColor:'rgba(139,147,161,0.55)', borderWidth:1, borderDash:[3,3], pointRadius:0, tension:0.15}
+    ]},
+    options:{
+      responsive:true,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:'#8B93A1',font:{family:'Inter',size:11}}}},
+      scales:{
+        x:{ticks:{color:'#8B93A1',maxTicksLimit:8,font:{family:'IBM Plex Mono',size:10}},grid:{color:'#1c222b'}},
+        y:{ticks:{color:'#8B93A1',font:{family:'IBM Plex Mono',size:10}},grid:{color:'#1c222b'}}
       }
-      return jsonResponse(data, 200);
+    }
+  });
 
-    } catch (err) {
-      return jsonResponse({ error: String(err) }, 500);
+  document.getElementById('rsiPanel').style.display = 'block';
+  const rctx = document.getElementById('rsiChart').getContext('2d');
+  if(rsiChartObj) rsiChartObj.destroy();
+  rsiChartObj = new Chart(rctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'RSI', data:rsiArr, borderColor:'#D4A54A', borderWidth:1.4, pointRadius:0, tension:0.15},
+      {label:'70', data:labels.map(()=>70), borderColor:'#E0525C', borderWidth:1, borderDash:[4,4], pointRadius:0},
+      {label:'30', data:labels.map(()=>30), borderColor:'#2FB77D', borderWidth:1, borderDash:[4,4], pointRadius:0}
+    ]},
+    options:{
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{display:false},grid:{color:'#1c222b'}},
+        y:{min:0,max:100,ticks:{color:'#8B93A1',font:{family:'IBM Plex Mono',size:10}},grid:{color:'#1c222b'}}
+      }
+    }
+  });
+
+  const lastClose = closes[closes.length-1];
+  const prevClose = closes[closes.length-2];
+  const changePct = ((lastClose-prevClose)/prevClose*100);
+  const lastRsi = rsiArr[rsiArr.length-1];
+  const lastMacd = macdArr[macdArr.length-1];
+  const lastSma20 = sma20[sma20.length-1], lastSma50 = sma50[sma50.length-1];
+  const vols = priceData.map(d=>d.volume);
+  const last5 = vols.slice(-5).reduce((a,b)=>a+b,0)/5;
+  const prev5 = vols.slice(-10,-5).reduce((a,b)=>a+b,0)/5;
+  const volTrendPct = ((last5-prev5)/(prev5||1))*100;
+
+  // MA trendi + kesişim tespiti (son 10 günde sma20/sma50 farkının işareti değişti mi)
+  let maTrendLabel = lastSma20 >= lastSma50 ? 'Yükseliş' : 'Düşüş';
+  const diffNow = lastSma20 - lastSma50;
+  for(let k=Math.max(1,sma20.length-10); k<sma20.length; k++){
+    if(sma20[k-1]!=null && sma50[k-1]!=null){
+      const diffPrev = sma20[k-1]-sma50[k-1];
+      if(diffPrev<0 && diffNow>0) maTrendLabel = 'Altın Kesişim';
+      if(diffPrev>0 && diffNow<0) maTrendLabel = 'Ölüm Kesişimi';
     }
   }
-};
+
+  // RSI trendi: son değeri 5 gün önceki değerle kıyasla
+  const rsi5Ago = rsiArr[rsiArr.length-6];
+  let rsiTrendLabel = 'Yatay';
+  if(rsi5Ago!=null){
+    const rsiDiff = lastRsi - rsi5Ago;
+    if(rsiDiff > 3) rsiTrendLabel = 'Yükseliyor';
+    else if(rsiDiff < -3) rsiTrendLabel = 'Düşüyor';
+  }
+  const rsiSon10Gun = rsiArr.slice(-10).filter(v=>v!=null).map(v=>Number(v.toFixed(1)));
+
+  // Bollinger konumu ve bant genişliği
+  const lastUpper = bb.upper[bb.upper.length-1];
+  const lastLower = bb.lower[bb.lower.length-1];
+  const lastMid = bb.mid[bb.mid.length-1];
+  let bbPosition = 'Orta Bant';
+  if(lastClose >= lastUpper) bbPosition = 'Üst Bandın Üzerinde';
+  else if(lastClose <= lastLower) bbPosition = 'Alt Bandın Altında';
+  else if(lastClose > lastMid) bbPosition = 'Üst Banda Yakın';
+  else bbPosition = 'Alt Banda Yakın';
+  const bandWidthPct = ((lastUpper-lastLower)/lastMid)*100;
+
+  document.getElementById('statsPanel').style.display = 'block';
+  document.getElementById('statPrice').textContent = lastClose.toFixed(2)+' ₺';
+  const chEl = document.getElementById('statChange');
+  chEl.textContent = (changePct>=0?'+':'')+changePct.toFixed(2)+'%';
+  chEl.className = 'value ' + (changePct>=0?'up':'down');
+  document.getElementById('statSma').textContent = lastSma20.toFixed(2)+' / '+lastSma50.toFixed(2);
+  const maTrendEl = document.getElementById('statMaTrend');
+  maTrendEl.textContent = maTrendLabel;
+  maTrendEl.className = 'value ' + (maTrendLabel==='Yükseliş'||maTrendLabel==='Altın Kesişim' ? 'up' : maTrendLabel==='Düşüş'||maTrendLabel==='Ölüm Kesişimi' ? 'down' : '');
+  const rsiEl = document.getElementById('statRsi');
+  rsiEl.textContent = lastRsi.toFixed(1) + (lastRsi>70?' (Aşırı Alım)':lastRsi<30?' (Aşırı Satım)':'');
+  rsiEl.className = 'value ' + (lastRsi>70?'down':lastRsi<30?'up':'');
+  const rsiTrendEl = document.getElementById('statRsiTrend');
+  rsiTrendEl.textContent = rsiTrendLabel;
+  rsiTrendEl.className = 'value ' + (rsiTrendLabel==='Yükseliyor'?'up':rsiTrendLabel==='Düşüyor'?'down':'');
+  const macdEl = document.getElementById('statMacd');
+  macdEl.textContent = lastMacd.toFixed(3);
+  macdEl.className = 'value ' + (lastMacd>=0?'up':'down');
+  const bbEl = document.getElementById('statBollinger');
+  bbEl.textContent = bbPosition;
+  bbEl.className = 'value ' + (bbPosition==='Üst Bandın Üzerinde'?'down':bbPosition==='Alt Bandın Altında'?'up':'');
+  document.getElementById('statBandWidth').textContent = bandWidthPct.toFixed(1)+'%';
+  const volEl = document.getElementById('statVol');
+  volEl.textContent = (volTrendPct>=0?'+':'')+volTrendPct.toFixed(1)+'%';
+  volEl.className = 'value ' + (volTrendPct>=0?'up':'down');
+
+  window._teknikOzet = {
+    sembol: tickerInput.value.trim().toUpperCase(),
+    sonFiyat: Number(lastClose.toFixed(2)),
+    gunlukDegisimYuzde: Number(changePct.toFixed(2)),
+    sma20: Number(lastSma20.toFixed(2)),
+    sma50: Number(lastSma50.toFixed(2)),
+    maTrendi: maTrendLabel,
+    rsi14: Number(lastRsi.toFixed(1)),
+    rsi14Trendi: rsiTrendLabel,
+    rsi14Son10Gun: rsiSon10Gun,
+    macdHistogram: Number(lastMacd.toFixed(3)),
+    bollinger: {
+      ustBant: Number(lastUpper.toFixed(2)),
+      ortaBant: Number(lastMid.toFixed(2)),
+      altBant: Number(lastLower.toFixed(2)),
+      fiyatKonumu: bbPosition,
+      bantGenisligiYuzde: Number(bandWidthPct.toFixed(1))
+    },
+    hacimTrendYuzde: Number(volTrendPct.toFixed(1)),
+    ornekVeriMi: isSample
+  };
+}
+
+function setNeedle(score){
+  const deg = (score/100)*90;
+  document.getElementById('needle').style.transform = `translateX(-50%) rotate(${deg}deg)`;
+}
+
+async function runAI(){
+  if(!window._teknikOzet) return;
+  aiBtn.disabled = true;
+  aiBtn.innerHTML = '<span class="spin"></span>Analiz ediliyor';
+  document.getElementById('signalResult').innerHTML = '<div class="conf">Analiz ediliyor…</div>';
+  document.getElementById('summaryBox').innerHTML = '';
+
+  const temel = {
+    fk: document.getElementById('fFK').value || null,
+    pdDd: document.getElementById('fPDDD').value || null,
+    roeYuzde: document.getElementById('fROE').value || null,
+    netBorcOzkaynak: document.getElementById('fBO').value || null,
+    netKarMarjiTrendi: document.getElementById('fMarjTrend').value,
+    temettuVerimiYuzde: document.getElementById('fTemettu').value || null
+  };
+
+  const payload = { teknik: window._teknikOzet, temel };
+
+  if(PROXY_URL.indexOf('BURAYA_') === 0){
+    document.getElementById('signalResult').innerHTML = '<div class="conf" style="color:var(--down)">Vercel proxy URL\'si tanımlanmamış (koddaki PROXY_URL).</div>';
+    aiBtn.disabled = false;
+    aiBtn.textContent = 'AI Yorumu Üret';
+    return;
+  }
+
+  const systemPrompt = 'Sen bir hisse senedi analiz asistanısın. Sadece verilen sayısal verilere dayanarak yorum yap, veri dışı varsayım veya kesin/garanti ifade kullanma. SADECE geçerli JSON döndür, başka hiçbir açıklama, önsöz veya markdown kod bloğu ekleme. Şema: {"signal":"AL"|"SAT"|"TUT","confidence":"düşük"|"orta"|"yüksek","summary":"2-3 cümlelik Türkçe yorum","risks":"1-2 cümlelik kısa risk notu"}';
+
+  try{
+    const res = await fetch(PROXY_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        secret: APP_SECRET,
+        model: AI_MODEL,
+        messages:[
+          {role:'system', content: systemPrompt},
+          {role:'user', content: JSON.stringify(payload)}
+        ]
+      })
+    });
+    const rawText = await res.text();
+    let data;
+    try{
+      data = JSON.parse(rawText);
+    }catch(parseErr){
+      throw new Error('Sunucudan JSON gelmedi (HTTP '+res.status+'). Gelen içerik: ' + rawText.slice(0,200));
+    }
+    if(data.error) throw new Error(data.error);
+    const raw = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if(!raw) throw new Error('Yanıt alınamadı');
+    let clean = raw.trim().replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+    const verdict = JSON.parse(clean);
+    showVerdict(verdict);
+  }catch(err){
+    document.getElementById('signalResult').innerHTML = '<div class="conf" style="color:var(--down)">Analiz alınamadı: '+ err.message +'</div>';
+  }finally{
+    aiBtn.disabled = false;
+    aiBtn.textContent = 'AI Yorumu Üret';
+  }
+}
+
+function showVerdict(v){
+  const scoreMap = {AL:70, TUT:0, SAT:-70};
+  const confMult = {'düşük':0.5,'orta':0.8,'yüksek':1};
+  const base = scoreMap[v.signal] ?? 0;
+  const mult = confMult[v.confidence] ?? 0.7;
+  setNeedle(base*mult);
+
+  const colorClass = v.signal==='AL' ? 'up' : v.signal==='SAT' ? 'down' : 'neutral';
+  document.getElementById('signalResult').innerHTML =
+    `<div class="sig ${colorClass}">${v.signal}</div><div class="conf">Güven: ${v.confidence}</div>`;
+  document.getElementById('summaryBox').innerHTML =
+    `<div>${v.summary}</div><div class="risks">⚠ ${v.risks}</div>`;
+}
+</script>
+</body>
+</html>
