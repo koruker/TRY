@@ -216,20 +216,23 @@ let isSample = false;
 let priceChart = null;
 let rsiChartObj = null;
 
-// --- DeepSeek / Vercel Proxy Ayarları ---
-// 1) api/deepseek.js dosyasını GitHub reponun köküne (aynı repo, /api klasörü) ekle.
+// --- OpenRouter / Vercel Proxy Ayarları ---
+// 1) api/deepseek.js dosyasını GitHub reponun köküne (/api klasörü) ekle/güncelle.
 // 2) Vercel'de bu repoyu import et, deploy et.
 // 3) Vercel Dashboard > Project > Settings > Environment Variables'a ekle:
-//      DEEPSEEK_API_KEY = <DeepSeek'ten aldığın gerçek anahtar>
-//      APP_SECRET       = aşağıdaki APP_SECRET ile birebir aynı değer
+//      OPENROUTER_API_KEY = <openrouter.ai'den aldığın gerçek anahtar>
+//      APP_SECRET          = aşağıdaki APP_SECRET ile birebir aynı değer
 // 4) Deploy sonrası adresin şu formatta olur: https://<proje-adin>.vercel.app/api/deepseek
 //    Onu PROXY_URL'ye yapıştır.
 //    Not: APP_SECRET sayfa kaynağında görünür, gerçek bir yetkilendirme değildir;
-//    sadece rastgele bot isteklerine karşı hafif bir engel. Asıl korunan şey DEEPSEEK_API_KEY,
+//    sadece rastgele bot isteklerine karşı hafif bir engel. Asıl korunan şey OPENROUTER_API_KEY,
 //    o hiçbir zaman tarayıcıya gelmiyor, sadece Vercel sunucusunda kalıyor.
+//    ÖNEMLİ: AI_MODEL değerini kullanmadan önce openrouter.ai/models sayfasında
+//    "Price: Free" filtresiyle kontrol et — ücretsiz model listesi sık değişiyor.
 const PROXY_URL = 'https://try-koruker.vercel.app/api/deepseek';
+const PRICE_PROXY_URL = 'https://try-koruker.vercel.app/api/price';
 const APP_SECRET = 'TRY-deepseek-2026';
-const DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const AI_MODEL = 'meta-llama/llama-4-maverick:free';
 
 const tickerInput = document.getElementById('tickerInput');
 const fetchBtn = document.getElementById('fetchBtn');
@@ -249,7 +252,7 @@ async function loadTicker(){
 
   const symbol = raw.endsWith('.IS') ? raw : raw + '.IS';
   try{
-    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=6mo&interval=1d`);
+    const res = await fetch(`${PRICE_PROXY_URL}?symbol=${encodeURIComponent(symbol)}`);
     if(!res.ok) throw new Error('İstek başarısız');
     const json = await res.json();
     const r = json.chart.result[0];
@@ -532,7 +535,7 @@ async function runAI(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         secret: APP_SECRET,
-        model: DEEPSEEK_MODEL,
+        model: AI_MODEL,
         messages:[
           {role:'system', content: systemPrompt},
           {role:'user', content: JSON.stringify(payload)}
