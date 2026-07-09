@@ -1,6 +1,7 @@
 // api/deepseek.js
 // Vercel Node.js Fonksiyonu — resmi "fetch" Web Standard export imzası.
-// DEEPSEEK_API_KEY ve APP_SECRET, Vercel Dashboard > Settings > Environment Variables'tan gelir.
+// Artık DeepSeek'i doğrudan değil, OpenRouter üzerinden çağırıyor (ücretsiz model kullanmak için).
+// OPENROUTER_API_KEY ve APP_SECRET, Vercel Dashboard > Settings > Environment Variables'tan gelir.
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -42,20 +43,22 @@ export default {
       return jsonResponse({ error: 'Geçersiz istek: messages eksik' }, 400);
     }
 
-    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      return jsonResponse({ error: 'Sunucuda DEEPSEEK_API_KEY tanımlı değil' }, 500);
+      return jsonResponse({ error: 'Sunucuda OPENROUTER_API_KEY tanımlı değil' }, 500);
     }
 
     try {
-      const upstream = await fetch('https://api.deepseek.com/chat/completions', {
+      const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
+          'Authorization': 'Bearer ' + apiKey,
+          'HTTP-Referer': 'https://koruker.github.io',
+          'X-Title': 'Hisse Sinyal Terminali'
         },
         body: JSON.stringify({
-          model: model || 'deepseek-v4-flash',
+          model: model || 'meta-llama/llama-4-maverick:free',
           messages: messages,
           temperature: 0.3
         })
@@ -63,7 +66,7 @@ export default {
 
       const data = await upstream.json();
       if (!upstream.ok) {
-        return jsonResponse({ error: 'DeepSeek hata döndürdü: ' + JSON.stringify(data) }, upstream.status);
+        return jsonResponse({ error: 'OpenRouter hata döndürdü: ' + JSON.stringify(data) }, upstream.status);
       }
       return jsonResponse(data, 200);
 
