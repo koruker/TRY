@@ -527,7 +527,7 @@ async function runAI(){
     return;
   }
 
-  const systemPrompt = 'Sen bir hisse senedi analiz asistanısın. Sadece verilen sayısal verilere dayanarak yorum yap, veri dışı varsayım veya kesin/garanti ifade kullanma. SADECE geçerli JSON döndür, başka hiçbir açıklama, önsöz veya markdown kod bloğu ekleme. "confidence" alanı 0-100 arası bir tam sayı olmalı ve bu sinyalden ne kadar emin olduğunu yansıtmalı (net, çok yönlü uyumlu göstergeler varsa yüksek; göstergeler çelişkiliyse veya veri zayıfsa düşük olmalı). Şema: {"signal":"AL"|"SAT"|"TUT","confidence":0-100 arası tam sayı,"summary":"2-3 cümlelik Türkçe yorum","risks":"1-2 cümlelik kısa risk notu"}';
+  const systemPrompt = 'Sen bir hisse senedi analiz asistanısın. Sadece verilen sayısal verilere dayanarak yorum yap, veri dışı varsayım veya kesin/garanti ifade kullanma. SADECE geçerli JSON döndür, başka hiçbir açıklama, önsöz veya markdown kod bloğu ekleme. "confidence" alanı 0-100 arası bir tam sayı olmalı ve bu sinyalden ne kadar emin olduğunu yansıtmalı (net, çok yönlü uyumlu göstergeler varsa yüksek; göstergeler çelişkiliyse veya veri zayıfsa düşük olmalı). Dört alanın DÖRDÜ DE ZORUNLUDUR, hiçbirini boş bırakma; "risks" alanı için her zaman en az bir kısa risk notu yaz, boş string veya null döndürme. Şema: {"signal":"AL"|"SAT"|"TUT","confidence":0-100 arası tam sayı,"summary":"2-3 cümlelik Türkçe yorum","risks":"1-2 cümlelik kısa risk notu, asla boş bırakma"}';
 
   try{
     const res = await fetch(PROXY_URL, {
@@ -565,18 +565,22 @@ async function runAI(){
 }
 
 function showVerdict(v){
-  const direction = {AL:1, TUT:0, SAT:-1}[v.signal] ?? 0;
+  const signalLabel = v.signal || 'TUT';
+  const direction = {AL:1, TUT:0, SAT:-1}[signalLabel] ?? 0;
   let confidence = Number(v.confidence);
   if(!Number.isFinite(confidence)) confidence = 70;
   confidence = Math.max(0, Math.min(100, confidence));
 
   setNeedle(direction * confidence);
 
-  const colorClass = v.signal==='AL' ? 'up' : v.signal==='SAT' ? 'down' : 'neutral';
+  const colorClass = signalLabel==='AL' ? 'up' : signalLabel==='SAT' ? 'down' : 'neutral';
   document.getElementById('signalResult').innerHTML =
-    `<div class="sig ${colorClass}">${v.signal} %${confidence}</div><div class="conf">Güven Skoru</div>`;
+    `<div class="sig ${colorClass}">${signalLabel} %${confidence}</div><div class="conf">Güven Skoru</div>`;
+
+  const summaryText = v.summary || 'Model bir özet metni döndürmedi.';
+  const risksHtml = v.risks ? `<div class="risks">⚠ ${v.risks}</div>` : '';
   document.getElementById('summaryBox').innerHTML =
-    `<div>${v.summary}</div><div class="risks">⚠ ${v.risks}</div><div class="risks" style="opacity:.6">model: ${v._model || 'bilinmiyor'}</div>`;
+    `<div>${summaryText}</div>${risksHtml}<div class="risks" style="opacity:.6">model: ${v._model || 'bilinmiyor'}</div>`;
 }
 </script>
 </body>
